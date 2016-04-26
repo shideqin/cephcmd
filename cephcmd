@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+#coding:utf-8
+
+import sys
+import time
+from optparse import OptionParser
+from ceph.ceph_api import ceph_api
+
+CMD_LIST = {}
+#ACL_LIST = ['private', 'public-read', 'public-read-write']
+
+
+HELP = \
+'''s3cmd:
+    ls(list)            oss://bucket/[prefix] --marker=xxx --delimiter=xxx --maxkeys=xxx
+    deleteallobject     oss://bucket/[prefix] --force=false
+    uploadfromdir       localdir oss://bucket/[prefix] --check_point=check_point_file --replace=false --check_md5=false --thread_num=5
+    put localfile       oss://bucket/object --content_type=[content_type] --headers=\"key1:value1#key2:value2\" --check_md5=false
+    upload localfile    oss://bucket/object --content_type=[content_type] --check_md5=false
+    cat                 oss://bucket/object
+    meta                oss://bucket/object
+    copy                oss://source_bucket/source_object oss://target_bucket/target_object --headers=\"key1:value1#key2:value2\"
+    copybucket          oss://source_bucket/[prefix] oss://target_bucket/[prefix] --headers=\"key1:value1\" --replace=false --thread_num=5
+    rm(delete,del)      oss://bucket/object
+
+    uploadlarge localfile    oss://bucket/object --content_type=[content_type] --check_md5=false --thread_num=5
+    '''
+def cmd_help():
+    print HELP
+
+def setup_cmdlist(options):
+    ceph = ceph_api().conn(
+        id = options.accessid,
+        key = options.accesskey,
+        host = options.host,
+        port = (int)(options.port)
+        )
+    CMD_LIST['uploadfrompost'] = ceph.uploadfrompost
+    CMD_LIST['put'] = ceph.upload
+    CMD_LIST['upload'] = ceph.upload
+    CMD_LIST['uploadfromdir'] = ceph.uploadfromdir
+    CMD_LIST['rm'] = ceph.delete
+    CMD_LIST['delete'] = ceph.delete
+    CMD_LIST['del'] = ceph.delete
+    CMD_LIST['deleteallobject'] = ceph.deleteallobject
+    CMD_LIST['list'] = ceph.list
+    CMD_LIST['ls'] = ceph.list
+    CMD_LIST['meta'] = ceph.meta
+    CMD_LIST['cat'] = ceph.cat
+    CMD_LIST['copy'] = ceph.copy
+    CMD_LIST['copylarge'] = ceph.copylarge
+    CMD_LIST['copybucket'] = ceph.copybucket
+    CMD_LIST['uploadlarge'] = ceph.uploadlarge
+    
+    CMD_LIST['help'] = cmd_help
+
+def print_result(cmd, res):
+    import inspect
+    if inspect.isgenerator(res):
+        for r in res:
+            print "%s" % r
+    else:
+        if res is not None:
+            print "%s" % res
+
+if __name__ == '__main__':
+    parser = OptionParser()
+    parser.add_option("-H", "--host", dest="host", help="specify host")
+    parser.add_option("-P", "--port", dest="port", help="specify port")
+    parser.add_option("-i", "--id", dest="accessid", help="specify access id")
+    parser.add_option("-k", "--key", dest="accesskey", help="specify access key")
+    parser.add_option("", "--replace", dest="replace", help="replace the localfile if it is true")
+    parser.add_option("", "--marker", dest="marker", help="get bucket(list objects) parameter")
+    parser.add_option("", "--delimiter", dest="delimiter", help="get bucket(list objects) parameter")
+    parser.add_option("", "--maxkeys", dest="maxkeys", help="get bucket(list objects) parameter")
+    parser.add_option("", "--thread_num", dest="thread_num", help="upload thread num")
+    parser.add_option("", "--force", dest="force", help="if true, ignore interactive command, never prompt")
+    (options, args) = parser.parse_args()
+
+    if len(args) < 1:
+        print HELP 
+        sys.exit(1)
+
+    setup_cmdlist(options)
+
+    if args[0] not in CMD_LIST.keys():
+        print "unsupported command : %s " % args[0]
+        print "use --help for more information"
+        sys.exit(1) 
+
+    cmd = args[0]
+    begin = time.time()
+
+    #try:
+    res = CMD_LIST[cmd](args,options)
+    print_result(cmd,res)
+    #except TypeError:
+    #    print ""
+    #    sys.exit(1)
+    #except NameError:
+    #    print ""
+    #    sys.exit(1)
+
+    end = time.time()
+    sys.stderr.write("%.3f(s) elapsed\n" % (end - begin))
